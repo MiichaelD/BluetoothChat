@@ -22,8 +22,6 @@ import android.bluetooth.BluetoothDevice;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.os.Bundle;
-import android.os.Handler;
-import android.os.Message;
 import android.util.Log;
 import android.view.KeyEvent;
 import android.view.Menu;
@@ -42,35 +40,18 @@ import android.widget.Toast;
  * This is the main Activity that displays the current chat session.
  */
 public class BluetoothChat extends Activity {
-    // Debugging
-    private static final String TAG = "BluetoothChat";
-    private static final boolean D = true;
-    
+
     private static final String MSG_KEY = "msg_key";
-
-    // Message types sent from the BluetoothChatService Handler
-    public static final int MESSAGE_STATE_CHANGE = 1;
-    public static final int MESSAGE_READ = 2;
-    public static final int MESSAGE_WRITE = 3;
-    public static final int MESSAGE_DEVICE_NAME = 4;
-    public static final int MESSAGE_TOAST = 5;
-
-    // Key names received from the BluetoothChatService Handler
-    public static final String DEVICE_NAME = "device_name";
-    public static final String TOAST = "toast";
-
+    
     // Intent request codes
     private static final int REQUEST_CONNECT_DEVICE = 1;
     private static final int REQUEST_ENABLE_BT = 2;
-    
 
     // Layout Views
     private ListView mConversationView;
     private EditText mOutEditText;
     private Button mSendButton;
 
-    // Name of the connected device
-    private String mConnectedDeviceName = null;
     // Array adapter for the conversation thread
     private CustomArrayAdapter mConversationArrayAdapter;
     // String buffer for outgoing messages
@@ -80,14 +61,20 @@ public class BluetoothChat extends Activity {
 
 
  // The Handler that gets information back from the BluetoothChatService
-    private static Handler mHandler;
+    private static BluetoothHandler mHandler;
     
     
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        if(D) Log.e(TAG, "+++ ON CREATE +++");
+        if(Constants.D) Log.e(Constants.TAG, "+++ ON CREATE +++");
         setContentView(R.layout.main);
+        
+        
+        if(BluetoothHandler.isSetup())
+        	mHandler = BluetoothHandler.getIns();
+        else
+        	mHandler = BluetoothHandler.setup(this);
         
         
         
@@ -113,76 +100,8 @@ public class BluetoothChat extends Activity {
         
         // Initialize the buffer for outgoing messages
         mOutStringBuffer = new StringBuffer("");
-        
-        
-        
-        if(savedInstanceState == null && mHandler == null)
-        	mHandler = new Handler() {
-            @Override
-            public void handleMessage(Message msg) {
-                switch (msg.what) {
-                case MESSAGE_STATE_CHANGE:
-                    if(D) Log.i(TAG, "MESSAGE_STATE_CHANGE: " + msg.arg1);
-                    switch (msg.arg1) {
-                    case BluetoothChatService.STATE_CONNECTED:                    
-                        mConversationArrayAdapter.clear();
-                        break;
-                    case BluetoothChatService.STATE_CONNECTING:
-                        break;
-                    case BluetoothChatService.STATE_LISTEN:
-                    	
-                    case BluetoothChatService.STATE_NONE:
-                        break;
-                    }
-                    break;
-                case MESSAGE_WRITE:
-                    byte[] writeBuf = (byte[]) msg.obj;
-                    // construct a string from the buffer
-                    String writeMessage = new String(writeBuf);
-                    mConversationArrayAdapter.add("Me:  " + writeMessage);
-                    /* 
-                     new Thread(new Runnable(){public void run(){
-                    	try {
-    						//Thread.sleep(100);
-    					} catch (Exception e) {}
-                    	
-                    	// Could also check if wantedPosition is between listView.getFirstVisiblePosition() and listView.getLastVisiblePosition() instead.
-                    	if(mConversationView.getChildCount() == 0 )
-                    		return;
-                    	final View wantedView = mConversationView.getChildAt(mConversationView.getChildCount()-1);
-                    	
-                    	if(wantedView != null){
-                    		final String text = (String) ((TextView)wantedView).getText();
-                    		System.out.println(text);
-                    		runOnUiThread(new Runnable(){public void run(){
-                            	//((TextView)mConversationView.getChildAt(mConversationArrayAdapter.getCount()-1)).setTextColor(Color.GREEN);
-                        		((TextView)wantedView).setTextColor(text.startsWith("Me: ")?Color.GREEN:Color.CYAN);
-                            }});
-                    	}
-                    }}).start();  
-                     * */
-                    break;
-                case MESSAGE_READ:
-                    byte[] readBuf = (byte[]) msg.obj;
-                    // construct a string from the valid bytes in the buffer
-                    if(msg.arg1>0) {
-                    	String readMessage = new String(readBuf, 0, msg.arg1);
-                    	mConversationArrayAdapter.add(mConnectedDeviceName+":  " + readMessage);
-                    }
-                    break;
-                case MESSAGE_DEVICE_NAME:
-                    // save the connected device's name
-                    mConnectedDeviceName = msg.getData().getString(DEVICE_NAME);
-                    Toast.makeText(getApplicationContext(), "Connected to "
-                                   + mConnectedDeviceName, Toast.LENGTH_SHORT).show();
-                    break;
-                case MESSAGE_TOAST:
-                    Toast.makeText(getApplicationContext(), msg.getData().getString(TOAST),
-                                   Toast.LENGTH_SHORT).show();
-                    break;
-                }
-            }
-        };
+
+        mHandler.setConversationAdapter(mConversationArrayAdapter);
         
 
         // Get local Bluetooth adapter
@@ -215,7 +134,7 @@ public class BluetoothChat extends Activity {
     @Override
     public void onStart() {
         super.onStart();
-        if(D) Log.e(TAG, "++ ON START ++");
+        if(Constants.D) Log.e(Constants.TAG, "++ ON START ++");
 
         // If BT is not on, request that it be enabled.
         // setupChat() will then be called during onActivityResult
@@ -232,7 +151,7 @@ public class BluetoothChat extends Activity {
     @Override
     public synchronized void onResume() {
         super.onResume();
-        if(D) Log.e(TAG, "+ ON RESUME +");
+        if(Constants.D) Log.e(Constants.TAG, "+ ON RESUME +");
 
         // Performing this check in onResume() covers the case in which BT was
         // not enabled during onStart(), so we were paused to enable it...
@@ -245,13 +164,13 @@ public class BluetoothChat extends Activity {
         super.onConfigurationChanged(newConfig);
 
         if (newConfig.orientation == Configuration.ORIENTATION_LANDSCAPE) {
-            Log.e(TAG, "ORIENTATION_LANDSCAPE");
+            Log.e(Constants.TAG, "ORIENTATION_LANDSCAPE");
         } else if (newConfig.orientation == Configuration.ORIENTATION_PORTRAIT) {
-            Log.e(TAG, "ORIENTATION_PORTRAIT");
+            Log.e(Constants.TAG, "ORIENTATION_PORTRAIT");
         }
     }
     private void setupChat() {
-        Log.d(TAG, "setupChat()");
+        Log.d(Constants.TAG, "setupChat()");
 
         // Initialize the BluetoothChatService to perform bluetooth connections
         BluetoothChatService.setup(this, mHandler);
@@ -261,19 +180,19 @@ public class BluetoothChat extends Activity {
     @Override
     public synchronized void onPause() {
         super.onPause();
-        if(D) Log.e(TAG, "- ON PAUSE -");
+        if(Constants.D) Log.e(Constants.TAG, "- ON PAUSE -");
     }
 
     @Override
     public void onStop() {
         super.onStop();
-        if(D) Log.e(TAG, "-- ON STOP --");
+        if(Constants.D) Log.e(Constants.TAG, "-- ON STOP --");
     }
 
     @Override
     public void onDestroy() {
         super.onDestroy();
-        if(D) Log.e(TAG, "--- ON DESTROY ---");
+        if(Constants.D) Log.e(Constants.TAG, "--- ON DESTROY ---");
     }
 
     /* (non-Javadoc)
@@ -281,7 +200,7 @@ public class BluetoothChat extends Activity {
 	@Override
 	public void onBackPressed() {
 		super.onBackPressed();
-        if(D) Log.e(TAG, "--- ON BACK KEY PRESSED ---");
+        if(Constants.D) Log.e(Constants.TAG, "--- ON BACK KEY PRESSED ---");
 		stopChatService();
 	}
 	
@@ -293,7 +212,7 @@ public class BluetoothChat extends Activity {
 	}
 
 	private void ensureDiscoverable() {
-        if(D) Log.d(TAG, "ensure discoverable");
+        if(Constants.D) Log.d(Constants.TAG, "ensure discoverable");
         if (mBluetoothAdapter.getScanMode() !=
             BluetoothAdapter.SCAN_MODE_CONNECTABLE_DISCOVERABLE) {
             Intent discoverableIntent = new Intent(BluetoothAdapter.ACTION_REQUEST_DISCOVERABLE);
@@ -330,17 +249,17 @@ public class BluetoothChat extends Activity {
         new TextView.OnEditorActionListener() {
         public boolean onEditorAction(TextView view, int actionId, KeyEvent event) {
             // If the action is a key-up event on the return key, send the message
-            if (actionId == EditorInfo.IME_NULL && event.getAction() == KeyEvent.ACTION_UP) {
+            if (actionId == EditorInfo.IME_ACTION_DONE && event.getAction() == KeyEvent.ACTION_UP) {
                 String message = view.getText().toString();
                 sendMessage(message);
             }
-            if(D) Log.i(TAG, "END onEditorAction");
+            if(Constants.D) Log.i(Constants.TAG, "END onEditorAction");
             return true;
         }
     };
 
     public void onActivityResult(int requestCode, int resultCode, Intent data) {
-        if(D) Log.d(TAG, "onActivityResult " + resultCode);
+        if(Constants.D) Log.d(Constants.TAG, "onActivityResult " + resultCode);
         switch (requestCode) {
         case REQUEST_CONNECT_DEVICE:
             // When DeviceListActivity returns with a device to connect
@@ -361,7 +280,7 @@ public class BluetoothChat extends Activity {
                 setupChat();
             } else {
                 // User did not enable Bluetooth or an error occured
-                Log.d(TAG, "BT not enabled");
+                Log.d(Constants.TAG, "BT not enabled");
                 Toast.makeText(this, R.string.bt_not_enabled_leaving, Toast.LENGTH_SHORT).show();
                 finish();
             }
@@ -397,7 +316,7 @@ public class BluetoothChat extends Activity {
 	@Override
 	protected void onRestoreInstanceState(Bundle savedInstanceState) {
 		super.onRestoreInstanceState(savedInstanceState);
-		 if(D) Log.i(TAG,"onRestoreInstanceState restoring  values");
+		 if(Constants.D) Log.i(Constants.TAG,"onRestoreInstanceState restoring  values");
 		// Initialize the array adapter for the conversation thread
         if (savedInstanceState != null) {
         	String[] values =  savedInstanceState.getStringArray(MSG_KEY);
@@ -417,7 +336,7 @@ public class BluetoothChat extends Activity {
         super.onSaveInstanceState(savedState);
         if(mConversationArrayAdapter != null){
 	        int operations = mConversationArrayAdapter.getCount();
-	        if(D) Log.i(TAG,"onSaveInstanceState saving "+operations+" values");
+	        if(Constants.D) Log.i(Constants.TAG,"onSaveInstanceState saving "+operations+" values");
 	        
 	        String[] values =  new String[operations];
 	        for(int i =0 ; i < operations;i++)
