@@ -64,6 +64,39 @@ public class BluetoothChatService {
     public static final int STATE_LISTEN = 1;     // now listening for incoming connections
     public static final int STATE_CONNECTING = 2; // now initiating an outgoing connection
     public static final int STATE_CONNECTED = 3;  // now connected to a remote device
+    
+    private static BluetoothChatService _instance;
+    
+    /** Check if the service is already setup*/
+    public static boolean isSetup(){
+    	return _instance != null;
+    }
+    
+    /** Setup and initialize the BluetoothChatService
+     * @param Context, the application context
+     * @param Handler the handler to interact with the activity
+     * @throws IllegalStateException if trying to setup more than once*/
+    public static void setup(Context context, Handler handler){
+    	if(isSetup())
+    		throw new IllegalStateException(
+    				"You should setup the BluetoothChatService just ONCE");
+    	
+    	_instance = new BluetoothChatService(context, handler);
+    }
+    
+    /**Get the instance of the bluetooth service
+    * @param Context, the application context
+    * @param Handler the handler to interact with the activity
+    * @throws IllegalStateException if trying to get the instance without setting up first
+    * @return the BluetoothChatService's Singleton*/
+    public static BluetoothChatService getIns(){
+    	if(!isSetup())
+    		throw new IllegalStateException(
+    				"You should setup the BluetoothChatService before accesing its members");
+    	
+    	return _instance;
+    }
+    
 
     /**
      * Constructor. Prepares a new BluetoothChat session.
@@ -76,6 +109,18 @@ public class BluetoothChatService {
         mHandler = handler;
     }
 
+    /** Performing this check in onResume() covers the case in which BT was
+       not enabled during onStart(), so we were paused to enable it...
+       onResume() will be called when ACTION_REQUEST_ENABLE activity returns. 
+     * */
+    public void onResume(){
+    	// Only if the state is STATE_NONE, do we know that we haven't started already
+        if (_instance.getState() == BluetoothChatService.STATE_NONE) {
+          // Start the Bluetooth chat services
+          _instance.start();
+        }
+    }
+    
     /**
      * Set the current state of the chat connection
      * @param state  An integer defining the current connection state
