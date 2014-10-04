@@ -64,6 +64,39 @@ public class BluetoothChatService {
     public static final int STATE_LISTEN = 1;     // now listening for incoming connections
     public static final int STATE_CONNECTING = 2; // now initiating an outgoing connection
     public static final int STATE_CONNECTED = 3;  // now connected to a remote device
+    
+    private static BluetoothChatService _instance;
+    
+    /** Check if the service is already setup*/
+    public static boolean isSetup(){
+    	return _instance != null;
+    }
+    
+    /** Setup and initialize the BluetoothChatService
+     * @param Context, the application context
+     * @param Handler the handler to interact with the activity
+     * @throws IllegalStateException if trying to setup more than once*/
+    public static void setup(Context context, Handler handler){
+    	if(isSetup())
+    		throw new IllegalStateException(
+    				"You should setup the BluetoothChatService just ONCE");
+    	
+    	_instance = new BluetoothChatService(context, handler);
+    }
+    
+    /**Get the instance of the bluetooth service
+    * @param Context, the application context
+    * @param Handler the handler to interact with the activity
+    * @throws IllegalStateException if trying to get the instance without setting up first
+    * @return the BluetoothChatService's Singleton*/
+    public static BluetoothChatService getIns(){
+    	if(!isSetup())
+    		throw new IllegalStateException(
+    				"You should setup the BluetoothChatService before accesing its members");
+    	
+    	return _instance;
+    }
+    
 
     /**
      * Constructor. Prepares a new BluetoothChat session.
@@ -76,6 +109,18 @@ public class BluetoothChatService {
         mHandler = handler;
     }
 
+    /** Performing this check in onResume() covers the case in which BT was
+       not enabled during onStart(), so we were paused to enable it...
+       onResume() will be called when ACTION_REQUEST_ENABLE activity returns. 
+     * */
+    public void onResume(){
+    	// Only if the state is STATE_NONE, do we know that we haven't started already
+        if (_instance.getState() == BluetoothChatService.STATE_NONE) {
+          // Start the Bluetooth chat services
+          _instance.start();
+        }
+    }
+    
     /**
      * Set the current state of the chat connection
      * @param state  An integer defining the current connection state
@@ -85,7 +130,7 @@ public class BluetoothChatService {
         mState = state;
 
         // Give the new state to the Handler so the UI Activity can update
-        mHandler.obtainMessage(BluetoothChat.MESSAGE_STATE_CHANGE, state, -1).sendToTarget();
+        mHandler.obtainMessage(Constants.MESSAGE_STATE_CHANGE, state, -1).sendToTarget();
     }
 
     /**
@@ -157,9 +202,9 @@ public class BluetoothChatService {
         mConnectedThread.start();
 
         // Send the name of the connected device back to the UI Activity
-        Message msg = mHandler.obtainMessage(BluetoothChat.MESSAGE_DEVICE_NAME);
+        Message msg = mHandler.obtainMessage(Constants.MESSAGE_DEVICE_NAME);
         Bundle bundle = new Bundle();
-        bundle.putString(BluetoothChat.DEVICE_NAME, device.getName());
+        bundle.putString(Constants.DEVICE_NAME, device.getName());
         msg.setData(bundle);
         mHandler.sendMessage(msg);
 
@@ -201,9 +246,9 @@ public class BluetoothChatService {
         setState(STATE_LISTEN);
 
         // Send a failure message back to the Activity
-        Message msg = mHandler.obtainMessage(BluetoothChat.MESSAGE_TOAST);
+        Message msg = mHandler.obtainMessage(Constants.MESSAGE_TOAST);
         Bundle bundle = new Bundle();
-        bundle.putString(BluetoothChat.TOAST, "Unable to connect device");
+        bundle.putString(Constants.TOAST, "Unable to connect device");
         msg.setData(bundle);
         mHandler.sendMessage(msg);
     }
@@ -215,9 +260,9 @@ public class BluetoothChatService {
         setState(STATE_LISTEN);
 
         // Send a failure message back to the Activity
-        Message msg = mHandler.obtainMessage(BluetoothChat.MESSAGE_TOAST);
+        Message msg = mHandler.obtainMessage(Constants.MESSAGE_TOAST);
         Bundle bundle = new Bundle();
-        bundle.putString(BluetoothChat.TOAST, "Device connection was lost");
+        bundle.putString(Constants.TOAST, "Device connection was lost");
         msg.setData(bundle);
         mHandler.sendMessage(msg);
     }
@@ -400,7 +445,7 @@ public class BluetoothChatService {
                     bytes = mmInStream.read(buffer);
 
                     // Send the obtained bytes to the UI Activity
-                    mHandler.obtainMessage(BluetoothChat.MESSAGE_READ, bytes, -1, buffer)
+                    mHandler.obtainMessage(Constants.MESSAGE_READ, bytes, -1, buffer)
                             .sendToTarget();
                 } catch (IOException e) {
                     Log.e(TAG, "disconnected", e);
@@ -419,7 +464,7 @@ public class BluetoothChatService {
                 mmOutStream.write(buffer);
 
                 // Share the sent message back to the UI Activity
-                mHandler.obtainMessage(BluetoothChat.MESSAGE_WRITE, -1, -1, buffer)
+                mHandler.obtainMessage(Constants.MESSAGE_WRITE, -1, -1, buffer)
                         .sendToTarget();
             } catch (IOException e) {
                 Log.e(TAG, "Exception during write", e);

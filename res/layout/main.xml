@@ -35,6 +35,9 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:imeOptions="actionSend|flagNoExtractUi"
+            android:inputType="text"
+            android:hint="@string/input_text"
             android:layout_gravity="bottom"
         />
         <Button android:id="@+id/button_send"
